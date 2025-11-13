@@ -35,7 +35,8 @@ async function updateFeaturedPost() {
     }
 
     // 2. Get ALL eligible Post IDs and select one randomly in the script.
-    const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}`;
+// The addition of visibility:public forces the API to include all public posts
+const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}+visibility:public`;
     let eligiblePosts = [];
     
     // Standardize API call 2 (Fetching ALL eligible post IDs)

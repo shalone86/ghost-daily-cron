@@ -12,19 +12,29 @@ const api = new GhostAdminAPI({
 });
 
 async function updateFeaturedPost() {
+    // ... inside async function updateFeaturedPost() {
+
     // 1. Unfeature dynamic posts (excluding permanent ones)
-    const filterToUnfeature = `featured:true+tag:-${PERMANENT_FEATURE_TAG}`;
-    const dynamicFeaturedPosts = await api.posts.browse({
-        filter: filterToUnfeature,
-        limit: 'all'
-    });
+    try {
+        const filterToUnfeature = `featured:true+tag:-${PERMANENT_FEATURE_TAG}`;
 
-    for (const currentFeatured of dynamicFeaturedPosts.posts) {
-        await api.posts.edit({ ...currentFeatured, featured: false });
-        // console.log(`Unfeatured dynamic post: ${currentFeatured.title}`);
+        const dynamicFeaturedPosts = await api.posts.browse({
+            filter: filterToUnfeature,
+            limit: 'all'
+        });
+
+        // ⭐ CORRECTION: Safely access the posts array and ensure it's iterable
+        const postsToUnfeature = dynamicFeaturedPosts.posts || [];
+        
+        for (const currentFeatured of postsToUnfeature) {
+            await api.posts.edit({ ...currentFeatured, featured: false });
+            // console.log(`Unfeatured dynamic post: ${currentFeatured.title}`);
+        }
+    } catch (error) {
+        // Log the error and allow the rest of the script to continue
+        console.error('Error in unfeaturing step:', error.message);
     }
-
-    // 2. Get Total Count of eligible posts (excluding permanent ones)
+// ... rest of the script (Step 2 and onwards) is fine    // 2. Get Total Count of eligible posts (excluding permanent ones)
     const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}`;
     const { meta } = await api.posts.browse({
         filter: filterForRandom,

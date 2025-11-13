@@ -14,7 +14,7 @@ const api = new GhostAdminAPI({
 // ... (The rest of the script remains the same above this function)
 
 async function updateFeaturedPost() {
-    // 1. Unfeature dynamic posts (excluding permanent ones)
+    // 1. Unfeature dynamic posts (original logic remains the same)
     const filterToUnfeature = `featured:true+tag:-${PERMANENT_FEATURE_TAG}+visibility:public`;
     
     let postsToUnfeature = [];
@@ -32,28 +32,26 @@ async function updateFeaturedPost() {
         await api.posts.edit({ ...currentFeatured, featured: false });
     }
 
-    // 2. FAIL-SAFE: Select the newest eligible post (order by published date descending)
-    const filterForSelection = `status:published+tag:-${PERMANENT_FEATURE_TAG}+visibility:public`;
+    // 2. ABSOLUTE FAIL-SAFE TEST: Fetch the newest PUBLISHED post with NO FILTERS
+    const filterForSelection = `status:published`; // ***NO TAG OR VISIBILITY FILTERS***
     
     let newFeaturedPost;
     try {
-        // Request the ONE newest post
         const data = await api.posts.browse({
             filter: filterForSelection,
             limit: 1, 
-            order: 'published_at DESC' // Ensures we get the newest post
+            order: 'published_at DESC'
         });
         
-        // Safety check
         newFeaturedPost = data.posts && data.posts.length > 0 ? data.posts[0] : null;
 
     } catch (e) {
-        throw new Error(`Failed to fetch the newest post: ${e.message}`);
+        throw new Error(`Failed to fetch the newest post (UNFILTERED TEST): ${e.message}`);
     }
 
     if (!newFeaturedPost) {
-        // If this still fails, the problem is a severe misconfiguration in Ghost permissions or zero eligible posts.
-        throw new Error('Could not find ANY post for featuring. Please verify Ghost permissions and eligible post count.');
+        // If this fails, the key cannot even read published posts.
+        throw new Error('TEST FAILED: Could not find ANY published post with NO FILTERS. Your Ghost Admin API Key is faulty.');
     }
 
     // 3. Feature the new post

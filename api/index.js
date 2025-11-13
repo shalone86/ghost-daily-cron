@@ -35,26 +35,23 @@ async function updateFeaturedPost() {
     }
 
     // 2. Get Total Count of eligible posts
-    const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}`;
-    let totalCount = 0;
-    
-    // Standardize API call 2
-    try {
-        const response = await api.posts.browse({
-            filter: filterForRandom,
-            limit: 'all', 
-            fields: 'id' 
-        });
-        
-        // Use optional chaining for safe access
-        totalCount = response.meta?.pagination?.total || 0; 
-    } catch (e) {
-        throw new Error(`Failed to retrieve total post count from Ghost: ${e.message}`);
-    }
+const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}`;
+let totalCount = 0;
 
-    if (totalCount === 0) {
-        throw new Error('No eligible posts found for randomization.');
-    }
+// Standardize API call 2 (Fetching Total Count)
+try {
+    const response = await api.posts.browse({
+        filter: filterForRandom,
+        limit: 1, // Only need one result, but the meta property returns the total count
+        fields: 'id'
+    });
+    
+    // Use optional chaining for safe access
+    totalCount = response.meta?.pagination?.total || 0; 
+} catch (e) {
+    // If this fails, something is fundamentally wrong with the Ghost API connection
+    throw new Error(`Failed to retrieve total post count from Ghost: ${e.message}`);
+}
 
     // 3. Select and feature the new random post
     const randomIndex = Math.floor(Math.random() * totalCount);

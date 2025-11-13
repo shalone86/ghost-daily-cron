@@ -1,4 +1,4 @@
-import GhostAdminAPI from '@tryghost/admin-api';
+const GhostAdminAPI = require('@tryghost/admin-api');
 
 // ⚠️ Get secrets from environment variables (safe and secure)
 const ADMIN_API_URL = process.env.GHOST_ADMIN_URL;
@@ -64,7 +64,7 @@ const totalCount = response.meta?.pagination?.total || 0;
 }
 
 // 5. The function handler that the serverless environment expects
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
     try {
         const title = await updateFeaturedPost();
         // Return a successful HTTP response that EasyCron expects

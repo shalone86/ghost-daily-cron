@@ -31,7 +31,11 @@ async function updateFeaturedPost() {
     
     for (const currentFeatured of postsToUnfeature) {
         try {
-            await api.posts.edit({ id: currentFeatured.id, featured: false });
+            await api.posts.edit({
+                id: currentFeatured.id,
+                updated_at: currentFeatured.updated_at,
+                featured: false
+            });
             console.log(`Unfeatured: ${currentFeatured.title}`);
         } catch (e) {
             console.error(`Failed to unfeature ${currentFeatured.id}:`, e.message);
@@ -64,7 +68,8 @@ async function updateFeaturedPost() {
     // 3. Feature the new post
     try {
         const updatedPost = await api.posts.edit({ 
-            id: newFeaturedPost.id, 
+            id: newFeaturedPost.id,
+            updated_at: newFeaturedPost.updated_at,
             featured: true 
         });
         console.log(`Successfully featured: ${updatedPost.title}`);

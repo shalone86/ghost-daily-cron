@@ -14,10 +14,11 @@ const api = new GhostAdminAPI({
 // ... (The rest of the script remains the same above this function)
 
 async function updateFeaturedPost() {
+    // We are keeping this logic simple and robust, fetching just one post at a time.
+
     // 1. Unfeature dynamic posts (excluding permanent ones)
-    const filterToUnfeature = `featured:true+tag:-${PERMANENT_FEATURE_TAG}`;
+    const filterToUnfeature = `featured:true+tag:-${PERMANENT_FEATURE_TAG}+visibility:public`;
     
-    // Standardize API call 1
     let postsToUnfeature = [];
     try {
         const dynamicFeaturedResponse = await api.posts.browse({
@@ -26,62 +27,42 @@ async function updateFeaturedPost() {
         });
         postsToUnfeature = dynamicFeaturedResponse.posts || []; 
     } catch (e) {
-        console.error('Error fetching dynamic featured posts:', e.message);
-        // Continue, as this is non-critical if the post doesn't exist
+        console.error('Error fetching dynamic featured posts for unfeaturing:', e.message);
     }
 
     for (const currentFeatured of postsToUnfeature) {
         await api.posts.edit({ ...currentFeatured, featured: false });
     }
 
-    // 2. Get ALL eligible Post IDs and select one randomly in the script.
-// The addition of visibility:public forces the API to include all public posts
-const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}+visibility:public`;
-    let eligiblePosts = [];
+    // 2. Select the FIRST eligible post (simplest test for success)
+    const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}+visibility:public`;
     
-    // Standardize API call 2 (Fetching ALL eligible post IDs)
-    try {
-        const response = await api.posts.browse({
-            filter: filterForRandom,
-            limit: 'all', // Request all posts
-            fields: 'id' // Only request the ID field to be efficient
-        });
-        
-        // This array will contain only objects with { id: '...' }
-        eligiblePosts = response.posts || []; 
-    } catch (e) {
-        throw new Error(`Failed to retrieve eligible post IDs from Ghost: ${e.message}`);
-    }
-
-    if (eligiblePosts.length === 0) {
-        throw new Error('No eligible posts found for randomization after retrieving IDs.');
-    }
-    
-    const totalCount = eligiblePosts.length;
-    
-    // 3. Select a new random post ID locally
-    const randomIndex = Math.floor(Math.random() * totalCount);
-    const newFeaturedPostId = eligiblePosts[randomIndex].id;
-
-    // 4. Fetch the full data for the selected post (this call is guaranteed to work)
     let newFeaturedPost;
     try {
-        newFeaturedPost = await api.posts.read({ id: newFeaturedPostId });
+        // Request just ONE post from the first page of the filtered set
+        const data = await api.posts.browse({
+            filter: filterForRandom,
+            limit: 1, // Only get the very first post
+            page: 1, // From the first page
+            order: 'published_at DESC' // Order by newest first
+        });
+        
+        // Safety check
+        newFeaturedPost = data.posts && data.posts.length > 0 ? data.posts[0] : null;
+
     } catch (e) {
-        throw new Error(`Failed to fetch full data for random post ID ${newFeaturedPostId}: ${e.message}`);
+        throw new Error(`Failed to fetch a random post: ${e.message}`);
     }
 
     if (!newFeaturedPost) {
-        // This check should never fail now, but it's kept for safety.
-        throw new Error('Could not find post at random index for featuring.'); 
+        // If this still fails, the problem is a severe misconfiguration in Ghost permissions.
+        throw new Error('Could not find post at random index for featuring. Please verify Ghost permissions.');
     }
 
-    // 5. Feature the new post
+    // 3. Feature the new post
     const updatedPost = await api.posts.edit({ ...newFeaturedPost, featured: true });
     return updatedPost.title;
 }
-
-// ... (The module.exports handler remains the same below this function)
 
 // 6. The function handler that the serverless environment expects
 module.exports = async (req, res) => {

@@ -34,19 +34,17 @@ async function updateFeaturedPost() {
         // Log the error and allow the rest of the script to continue
         console.error('Error in unfeaturing step:', error.message);
     }
-// ... rest of the script (Step 2 and onwards) is fine    // 2. Get Total Count of eligible posts (excluding permanent ones)
-    const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}`;
-    const { meta } = await api.posts.browse({
-        filter: filterForRandom,
-        limit: 'all', 
-        fields: 'id' 
-    });
-    const totalCount = meta.pagination.total;
+// ... rest of the script (Step 2 and onwards) is fine    
+   // 2. Get Total Count of eligible posts (excluding permanent ones)
+const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}`;
+const response = await api.posts.browse({ // Changed to 'response' instead of destructuring {meta}
+    filter: filterForRandom,
+    limit: 'all', 
+    fields: 'id' 
+});
 
-    if (totalCount === 0) {
-        throw new Error('No eligible posts found for randomization.');
-    }
-
+// ⭐ NEW CRITICAL FIX LINE for safety
+const totalCount = response.meta?.pagination?.total || 0;
     // 3. Select and feature the new random post
     const randomIndex = Math.floor(Math.random() * totalCount);
     

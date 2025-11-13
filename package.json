@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "ghost updater",
   "repository": {
-    "type": "module",
     "url": "ghost-daily-cron"
   },
   "license": "ISC",

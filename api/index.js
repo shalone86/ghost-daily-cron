@@ -42,50 +42,62 @@ async function updateFeaturedPost() {
         }
     }
     
-    // 2. Fetch the newest PUBLISHED post
+    // 2. Fetch ALL published posts
     const filterForSelection = `status:published`;
     
-    let newFeaturedPost;
+    let allPosts;
     try {
-        const data = await api.posts.browse({
+        allPosts = await api.posts.browse({
             filter: filterForSelection,
-            limit: 1, 
-            order: 'published_at DESC'
+            limit: 'all'
         });
         
-        newFeaturedPost = data && data.length > 0 ? data[0] : null;
-        console.log('Fetched posts data:', data);
+        console.log(`Fetched ${allPosts.length} total published posts`);
     } catch (e) {
-        throw new Error(`Failed to fetch the newest post: ${e.message}`);
+        throw new Error(`Failed to fetch published posts: ${e.message}`);
     }
     
-    if (!newFeaturedPost) {
+    if (!allPosts || allPosts.length === 0) {
         throw new Error('No published posts found. Check your Ghost Admin API key permissions.');
     }
     
-    console.log(`Selected post to feature: ${newFeaturedPost.title}`);
+    // 3. Select 3 random posts
+    const numberOfPostsToFeature = Math.min(3, allPosts.length);
+    const shuffled = allPosts.sort(() => Math.random() - 0.5);
+    const selectedPosts = shuffled.slice(0, numberOfPostsToFeature);
     
-    // 3. Feature the new post
-    try {
-        const updatedPost = await api.posts.edit({ 
-            id: newFeaturedPost.id,
-            updated_at: newFeaturedPost.updated_at,
-            featured: true 
-        });
-        console.log(`Successfully featured: ${updatedPost.title}`);
-        return updatedPost.title;
-    } catch (e) {
-        throw new Error(`Failed to feature post: ${e.message}`);
+    console.log(`Selected ${selectedPosts.length} random posts to feature`);
+    
+    // 4. Feature the selected posts
+    const featuredTitles = [];
+    for (const post of selectedPosts) {
+        try {
+            const updatedPost = await api.posts.edit({ 
+                id: post.id,
+                updated_at: post.updated_at,
+                featured: true 
+            });
+            console.log(`Successfully featured: ${updatedPost.title}`);
+            featuredTitles.push(updatedPost.title);
+        } catch (e) {
+            console.error(`Failed to feature ${post.title}:`, e.message);
+        }
     }
+    
+    if (featuredTitles.length === 0) {
+        throw new Error('Failed to feature any posts');
+    }
+    
+    return featuredTitles;
 }
 
 // 4. Serverless function handler
 module.exports = async (req, res) => {
     try {
-        const title = await updateFeaturedPost();
+        const titles = await updateFeaturedPost();
         res.status(200).json({ 
             success: true, 
-            message: `Successfully featured new post: ${title}` 
+            message: `Successfully featured ${titles.length} posts: ${titles.join(', ')}` 
         });
     } catch (error) {
         console.error('Cron job error:', error);

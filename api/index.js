@@ -8,13 +8,13 @@ const PERMANENT_FEATURE_TAG = 'hash-permanent-feature';
 const api = new GhostAdminAPI({
     url: ADMIN_API_URL,
     key: ADMIN_API_KEY,
-    version: 'v6.0' // Make sure this matches your Ghost version
+    version: 'v5.0' // Ghost API version
 });
 
-// ... (The rest of the script remains the same above this function)
-
 async function updateFeaturedPost() {
-    // 1. Unfeature dynamic posts (original logic remains the same)
+    console.log('Starting updateFeaturedPost...');
+    
+    // 1. Unfeature dynamic posts
     const filterToUnfeature = `featured:true+tag:-${PERMANENT_FEATURE_TAG}+visibility:public`;
     
     let postsToUnfeature = [];
@@ -23,17 +23,23 @@ async function updateFeaturedPost() {
             filter: filterToUnfeature,
             limit: 'all'
         });
-        postsToUnfeature = dynamicFeaturedResponse.posts || []; 
+        postsToUnfeature = dynamicFeaturedResponse || [];
+        console.log(`Found ${postsToUnfeature.length} posts to unfeature`);
     } catch (e) {
         console.error('Error fetching dynamic featured posts for unfeaturing:', e.message);
     }
-
+    
     for (const currentFeatured of postsToUnfeature) {
-        await api.posts.edit({ ...currentFeatured, featured: false });
+        try {
+            await api.posts.edit({ id: currentFeatured.id, featured: false });
+            console.log(`Unfeatured: ${currentFeatured.title}`);
+        } catch (e) {
+            console.error(`Failed to unfeature ${currentFeatured.id}:`, e.message);
+        }
     }
-
-    // 2. ABSOLUTE FAIL-SAFE TEST: Fetch the newest PUBLISHED post with NO FILTERS
-    const filterForSelection = `status:published`; // ***NO TAG OR VISIBILITY FILTERS***
+    
+    // 2. Fetch the newest PUBLISHED post
+    const filterForSelection = `status:published`;
     
     let newFeaturedPost;
     try {
@@ -43,33 +49,41 @@ async function updateFeaturedPost() {
             order: 'published_at DESC'
         });
         
-        newFeaturedPost = data.posts && data.posts.length > 0 ? data.posts[0] : null;
-
+        newFeaturedPost = data && data.length > 0 ? data[0] : null;
+        console.log('Fetched posts data:', data);
     } catch (e) {
-        throw new Error(`Failed to fetch the newest post (UNFILTERED TEST): ${e.message}`);
+        throw new Error(`Failed to fetch the newest post: ${e.message}`);
     }
-
+    
     if (!newFeaturedPost) {
-        // If this fails, the key cannot even read published posts.
-        throw new Error('TEST FAILED: Could not find ANY published post with NO FILTERS. Your Ghost Admin API Key is faulty.');
+        throw new Error('No published posts found. Check your Ghost Admin API key permissions.');
     }
-
+    
+    console.log(`Selected post to feature: ${newFeaturedPost.title}`);
+    
     // 3. Feature the new post
-    const updatedPost = await api.posts.edit({ ...newFeaturedPost, featured: true });
-    return updatedPost.title;
+    try {
+        const updatedPost = await api.posts.edit({ 
+            id: newFeaturedPost.id, 
+            featured: true 
+        });
+        console.log(`Successfully featured: ${updatedPost.title}`);
+        return updatedPost.title;
+    } catch (e) {
+        throw new Error(`Failed to feature post: ${e.message}`);
+    }
 }
 
-// 4. The function handler that the serverless environment expects
+// 4. Serverless function handler
 module.exports = async (req, res) => {
     try {
         const title = await updateFeaturedPost();
-        // Return a successful HTTP response that EasyCron expects
         res.status(200).json({ 
             success: true, 
             message: `Successfully featured new post: ${title}` 
         });
     } catch (error) {
-        // Return an error HTTP response if the job fails
+        console.error('Cron job error:', error);
         res.status(500).json({ 
             success: false, 
             message: `Cron job failed: ${error.message}` 

@@ -11,57 +11,76 @@ const api = new GhostAdminAPI({
     version: 'v6.0' // Make sure this matches your Ghost version
 });
 
+// ... (The rest of the script remains the same above this function)
+
 async function updateFeaturedPost() {
-    // ... inside async function updateFeaturedPost() {
-
     // 1. Unfeature dynamic posts (excluding permanent ones)
+    const filterToUnfeature = `featured:true+tag:-${PERMANENT_FEATURE_TAG}`;
+    
+    // Standardize API call 1
+    let postsToUnfeature = [];
     try {
-        const filterToUnfeature = `featured:true+tag:-${PERMANENT_FEATURE_TAG}`;
-
-        const dynamicFeaturedPosts = await api.posts.browse({
+        const dynamicFeaturedResponse = await api.posts.browse({
             filter: filterToUnfeature,
             limit: 'all'
         });
-
-        // ⭐ CORRECTION: Safely access the posts array and ensure it's iterable
-        const postsToUnfeature = dynamicFeaturedPosts.posts || [];
-        
-        for (const currentFeatured of postsToUnfeature) {
-            await api.posts.edit({ ...currentFeatured, featured: false });
-            // console.log(`Unfeatured dynamic post: ${currentFeatured.title}`);
-        }
-    } catch (error) {
-        // Log the error and allow the rest of the script to continue
-        console.error('Error in unfeaturing step:', error.message);
+        postsToUnfeature = dynamicFeaturedResponse.posts || []; 
+    } catch (e) {
+        console.error('Error fetching dynamic featured posts:', e.message);
+        // Continue, as this is non-critical if the post doesn't exist
     }
-// ... rest of the script (Step 2 and onwards) is fine    
-   // 2. Get Total Count of eligible posts (excluding permanent ones)
-const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}`;
-const response = await api.posts.browse({ // Changed to 'response' instead of destructuring {meta}
-    filter: filterForRandom,
-    limit: 'all', 
-    fields: 'id' 
-});
 
-// ⭐ NEW CRITICAL FIX LINE for safety
-const totalCount = response.meta?.pagination?.total || 0;
+    for (const currentFeatured of postsToUnfeature) {
+        await api.posts.edit({ ...currentFeatured, featured: false });
+    }
+
+    // 2. Get Total Count of eligible posts
+    const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}`;
+    let totalCount = 0;
+    
+    // Standardize API call 2
+    try {
+        const response = await api.posts.browse({
+            filter: filterForRandom,
+            limit: 'all', 
+            fields: 'id' 
+        });
+        
+        // Use optional chaining for safe access
+        totalCount = response.meta?.pagination?.total || 0; 
+    } catch (e) {
+        throw new Error(`Failed to retrieve total post count from Ghost: ${e.message}`);
+    }
+
+    if (totalCount === 0) {
+        throw new Error('No eligible posts found for randomization.');
+    }
+
     // 3. Select and feature the new random post
     const randomIndex = Math.floor(Math.random() * totalCount);
     
-    const [newFeaturedPost] = await api.posts.browse({
-        filter: filterForRandom,
-        limit: 1,
-        page: randomIndex + 1
-    }).then(data => data.posts);
+    // Standardize API call 3
+    let newFeaturedPost;
+    try {
+        const data = await api.posts.browse({
+            filter: filterForRandom,
+            limit: 1,
+            page: randomIndex + 1
+        });
+        newFeaturedPost = data.posts && data.posts.length > 0 ? data.posts[0] : null;
+    } catch (e) {
+        throw new Error(`Failed to fetch random post: ${e.message}`);
+    }
 
     if (!newFeaturedPost) {
-        throw new Error('Could not find post at random index.');
+        throw new Error('Could not find post at random index for featuring.');
     }
 
     // 4. Feature the new post
     const updatedPost = await api.posts.edit({ ...newFeaturedPost, featured: true });
     return updatedPost.title;
 }
+// ... (The rest of the script remains the same below this function)
 
 // 5. The function handler that the serverless environment expects
 module.exports = async (req, res) => {

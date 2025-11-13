@@ -34,52 +34,55 @@ async function updateFeaturedPost() {
         await api.posts.edit({ ...currentFeatured, featured: false });
     }
 
-    // 2. Get Total Count of eligible posts
-const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}`;
-let totalCount = 0;
-
-// Standardize API call 2 (Fetching Total Count)
-try {
-    const response = await api.posts.browse({
-        filter: filterForRandom,
-        limit: 1, // Only need one result, but the meta property returns the total count
-        fields: 'id'
-    });
+    // 2. Get ALL eligible Post IDs and select one randomly in the script.
+    const filterForRandom = `status:published+tag:-${PERMANENT_FEATURE_TAG}`;
+    let eligiblePosts = [];
     
-    // Use optional chaining for safe access
-    totalCount = response.meta?.pagination?.total || 0; 
-} catch (e) {
-    // If this fails, something is fundamentally wrong with the Ghost API connection
-    throw new Error(`Failed to retrieve total post count from Ghost: ${e.message}`);
-}
+    // Standardize API call 2 (Fetching ALL eligible post IDs)
+    try {
+        const response = await api.posts.browse({
+            filter: filterForRandom,
+            limit: 'all', // Request all posts
+            fields: 'id' // Only request the ID field to be efficient
+        });
+        
+        // This array will contain only objects with { id: '...' }
+        eligiblePosts = response.posts || []; 
+    } catch (e) {
+        throw new Error(`Failed to retrieve eligible post IDs from Ghost: ${e.message}`);
+    }
 
-    // 3. Select and feature the new random post
+    if (eligiblePosts.length === 0) {
+        throw new Error('No eligible posts found for randomization after retrieving IDs.');
+    }
+    
+    const totalCount = eligiblePosts.length;
+    
+    // 3. Select a new random post ID locally
     const randomIndex = Math.floor(Math.random() * totalCount);
-    
-    // Standardize API call 3
+    const newFeaturedPostId = eligiblePosts[randomIndex].id;
+
+    // 4. Fetch the full data for the selected post (this call is guaranteed to work)
     let newFeaturedPost;
     try {
-        const data = await api.posts.browse({
-            filter: filterForRandom,
-            limit: 1,
-            page: randomIndex + 1
-        });
-        newFeaturedPost = data.posts && data.posts.length > 0 ? data.posts[0] : null;
+        newFeaturedPost = await api.posts.read({ id: newFeaturedPostId });
     } catch (e) {
-        throw new Error(`Failed to fetch random post: ${e.message}`);
+        throw new Error(`Failed to fetch full data for random post ID ${newFeaturedPostId}: ${e.message}`);
     }
 
     if (!newFeaturedPost) {
-        throw new Error('Could not find post at random index for featuring.');
+        // This check should never fail now, but it's kept for safety.
+        throw new Error('Could not find post at random index for featuring.'); 
     }
 
-    // 4. Feature the new post
+    // 5. Feature the new post
     const updatedPost = await api.posts.edit({ ...newFeaturedPost, featured: true });
     return updatedPost.title;
 }
-// ... (The rest of the script remains the same below this function)
 
-// 5. The function handler that the serverless environment expects
+// ... (The module.exports handler remains the same below this function)
+
+// 6. The function handler that the serverless environment expects
 module.exports = async (req, res) => {
     try {
         const title = await updateFeaturedPost();

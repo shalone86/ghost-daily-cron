@@ -1,0 +1,19 @@
+{
+  "name": "ghost-daily-cron",
+  "version": "1.0.0",
+  "description": "ghost updater",
+  "repository": {
+    "type": "git",
+    "url": "ghost-daily-cron"
+  },
+  "license": "ISC",
+  "author": "shalone cason",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@tryghost/admin-api": "^1.14.0"
+  }
+}

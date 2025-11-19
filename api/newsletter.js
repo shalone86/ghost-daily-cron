@@ -61,14 +61,30 @@ function formatDate(date) {
 async function createWeeklyNewsletter() {
     console.log('Starting createWeeklyNewsletter...');
     
-    const today = new Date();
-    const dayOfWeek = today.getDay(); // 0 = Sunday, 5 = Friday
-    
-    // Check if it's Friday (optional - remove this check if you want to test immediately)
-    if (dayOfWeek !== 5) {
-        console.log(`Today is not Friday (day ${dayOfWeek}). Skipping newsletter creation.`);
-        return { skipped: true, message: 'Not Friday' };
-    }
+const isTest = req.query.test === 'true';
+const today = new Date().getDay();
+
+if (!isTest && today !== 5) {
+  return res.json({ success: true, message: "Not Friday" });
+}
+```
+
+**That's it!** You're only adding 1 line and modifying 1 line. You're **NOT removing any code**.
+
+### What changed:
+- **Line 1 (NEW):** `const isTest = req.query.test === 'true';` - checks for test parameter
+- **Line 3 (MODIFIED):** Changed `if (today !== 5)` to `if (!isTest && today !== 5)` - bypasses the Friday check when test=true
+
+## After deploying this change:
+
+**Normal URL** (only runs on Friday):
+```
+https://your-url.vercel.app/api/newsletter
+```
+
+**Test URL** (runs any day):
+```
+https://your-url.vercel.app/api/newsletter?test=true
     
     try {
         // Get 3 random images from Ghost posts

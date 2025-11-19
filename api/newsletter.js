@@ -59,13 +59,34 @@ async function getRandomImagesFromGhost() {
     }
 }
 
+async function getNewsletterByName(name) {
+    try {
+        const newsletters = await api.newsletters.browse();
+        const newsletter = newsletters.find(n => 
+            n.name.toLowerCase().includes(name.toLowerCase())
+        );
+        
+        if (!newsletter) {
+            console.log('Available newsletters:', newsletters.map(n => n.name).join(', '));
+            throw new Error(`Newsletter "${name}" not found`);
+        }
+        
+        console.log(`Found newsletter: ${newsletter.name} (ID: ${newsletter.id})`);
+        return newsletter;
+    } catch (error) {
+        console.error('Error fetching newsletter:', error);
+        throw error;
+    }
+}
+
 function formatDate(date) {
     const options = { year: 'numeric', month: 'long', day: 'numeric' };
     return date.toLocaleDateString('en-US', options);
 }
 
-async function createWeeklyNewsletter() {
+async function createWeeklyNewsletter(isTest = false) {
     console.log('Starting createWeeklyNewsletter...');
+    console.log('Test mode:', isTest);
     
     try {
         // Get 4 random images from Ghost posts
@@ -77,32 +98,32 @@ async function createWeeklyNewsletter() {
         console.log('Pick 2:', images.picks[1].title);
         console.log('Pick 3:', images.picks[2].title);
         
+        // Get the newsletter if not in test mode
+        let newsletter = null;
+        if (!isTest) {
+            newsletter = await getNewsletterByName('Catholic Gallery Newsletter');
+        }
+        
         // Build the newsletter content using Lexical format
         const newsletterTitle = `Weekly Newsletter - ${formatDate(new Date())}`;
         
         const lexicalContent = {
             root: {
                 children: [
-                    // Welcome paragraph
+                    // Welcome heading
                     {
-                        type: 'paragraph',
+                        type: 'heading',
+                        tag: 'h1',
                         children: [
                             {
                                 type: 'text',
-                                text: "Welcome to this week's newsletter!"
+                                text: "Welcome to this week's newsletter! Enjoy our Weekly Picks:"
                             }
                         ]
                     },
-                    // "Our Weekly Picks" heading
+                    // Divider
                     {
-                        type: 'heading',
-                        tag: 'h2',
-                        children: [
-                            {
-                                type: 'text',
-                                text: 'Our Weekly Picks'
-                            }
-                        ]
+                        type: 'horizontalrule'
                     },
                     // Pick 1
                     {
@@ -119,7 +140,7 @@ async function createWeeklyNewsletter() {
                         type: 'image',
                         src: images.picks[0].url,
                         alt: images.picks[0].title,
-                        caption: `<a href="${images.picks[0].originalUrl}">${images.picks[0].originalUrl}</a>`
+                        caption: `<a href="${images.picks[0].originalUrl}">read more</a>`
                     },
                     // Pick 2
                     {
@@ -136,7 +157,7 @@ async function createWeeklyNewsletter() {
                         type: 'image',
                         src: images.picks[1].url,
                         alt: images.picks[1].title,
-                        caption: `<a href="${images.picks[1].originalUrl}">${images.picks[1].originalUrl}</a>`
+                        caption: `<a href="${images.picks[1].originalUrl}">read more</a>`
                     },
                     // Pick 3
                     {
@@ -153,17 +174,13 @@ async function createWeeklyNewsletter() {
                         type: 'image',
                         src: images.picks[2].url,
                         alt: images.picks[2].title,
-                        caption: `<a href="${images.picks[2].originalUrl}">${images.picks[2].originalUrl}</a>`
+                        caption: `<a href="${images.picks[2].originalUrl}">read more</a>`
                     },
-                    // Closing paragraph
+                    // Callout card with thank you message
                     {
-                        type: 'paragraph',
-                        children: [
-                            {
-                                type: 'text',
-                                text: 'Thank you for being part of our community. Have a great weekend!'
-                            }
-                        ]
+                        type: 'callout',
+                        calloutEmoji: '💌',
+                        calloutText: 'Thank you for being part of our community. Have a great weekend!'
                     }
                 ],
                 direction: null,
@@ -176,23 +193,37 @@ async function createWeeklyNewsletter() {
         
         console.log('Lexical content created with', lexicalContent.root.children.length, 'cards');
         
-        // Create the draft post using lexical format
-        const newPost = await api.posts.add({
+        // Prepare post data
+        const postData = {
             title: newsletterTitle,
             lexical: JSON.stringify(lexicalContent),
-            status: 'draft',
             tags: ['newsletter'],
             feature_image: images.hero.url,
-            feature_image_caption: `<a href="${images.hero.originalUrl}">${images.hero.originalUrl}</a>`
-        });
+            feature_image_caption: `<a href="${images.hero.originalUrl}">read more</a>`
+        };
         
-        console.log(`Successfully created newsletter draft: ${newPost.title}`);
-        console.log(`Draft ID: ${newPost.id}`);
+        // If not in test mode, publish as email-only
+        if (!isTest && newsletter) {
+            postData.status = 'published';
+            postData.visibility = 'email';
+            postData.email_only = true;
+            postData.newsletters = [newsletter.id];
+        } else {
+            postData.status = 'draft';
+        }
+        
+        // Create the post
+        const newPost = await api.posts.add(postData);
+        
+        console.log(`Successfully created newsletter: ${newPost.title}`);
+        console.log(`Post ID: ${newPost.id}`);
+        console.log(`Status: ${newPost.status}`);
         
         return {
             success: true,
             postId: newPost.id,
             title: newPost.title,
+            status: newPost.status,
             url: `${ADMIN_API_URL}/ghost/#/editor/post/${newPost.id}`
         };
         
@@ -216,21 +247,17 @@ module.exports = async (req, res) => {
             });
         }
         
-        const result = await createWeeklyNewsletter();
+        const result = await createWeeklyNewsletter(isTest);
         
-        if (result.skipped) {
-            res.status(200).json({
-                success: true,
-                message: result.message
-            });
-        } else {
-            res.status(200).json({
-                success: true,
-                message: `Newsletter draft created: ${result.title}`,
-                postId: result.postId,
-                editUrl: result.url
-            });
-        }
+        res.status(200).json({
+            success: true,
+            message: isTest 
+                ? `Newsletter draft created: ${result.title}` 
+                : `Newsletter published and sent to Catholic Gallery Newsletter: ${result.title}`,
+            postId: result.postId,
+            status: result.status,
+            editUrl: result.url
+        });
     } catch (error) {
         console.error('Newsletter cron job error:', error);
         res.status(500).json({

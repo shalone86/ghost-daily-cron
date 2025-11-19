@@ -72,40 +72,125 @@ async function createWeeklyNewsletter() {
         console.log('Fetching random images from Ghost...');
         const images = await getRandomImagesFromGhost();
         
-        // Build the newsletter content
+        console.log('Hero image:', images.hero.title);
+        console.log('Pick 1:', images.picks[0].title);
+        console.log('Pick 2:', images.picks[1].title);
+        console.log('Pick 3:', images.picks[2].title);
+        
+        // Build the newsletter content using Lexical format
         const newsletterTitle = `Weekly Newsletter - ${formatDate(new Date())}`;
         
-        // Build the "Our Weekly Picks" section with 3 images
-        let weeklyPicksHtml = '';
-        images.picks.forEach(pick => {
-            weeklyPicksHtml += `
-                <h3>${pick.title}</h3>
-                <figure>
-                    <img src="${pick.url}" alt="${pick.title}">
-                    <figcaption><a href="${pick.originalUrl}">${pick.originalUrl}</a></figcaption>
-                </figure>
-            `;
-        });
+        const lexicalContent = {
+            root: {
+                children: [
+                    // Hero image
+                    {
+                        type: 'image',
+                        src: images.hero.url,
+                        alt: 'Newsletter hero image',
+                        caption: images.hero.originalUrl,
+                        href: images.hero.originalUrl
+                    },
+                    // Welcome paragraph
+                    {
+                        type: 'paragraph',
+                        children: [
+                            {
+                                type: 'text',
+                                text: "Welcome to this week's newsletter!"
+                            }
+                        ]
+                    },
+                    // "Our Weekly Picks" heading
+                    {
+                        type: 'heading',
+                        tag: 'h2',
+                        children: [
+                            {
+                                type: 'text',
+                                text: 'Our Weekly Picks'
+                            }
+                        ]
+                    },
+                    // Pick 1
+                    {
+                        type: 'heading',
+                        tag: 'h3',
+                        children: [
+                            {
+                                type: 'text',
+                                text: images.picks[0].title
+                            }
+                        ]
+                    },
+                    {
+                        type: 'image',
+                        src: images.picks[0].url,
+                        alt: images.picks[0].title,
+                        caption: images.picks[0].originalUrl,
+                        href: images.picks[0].originalUrl
+                    },
+                    // Pick 2
+                    {
+                        type: 'heading',
+                        tag: 'h3',
+                        children: [
+                            {
+                                type: 'text',
+                                text: images.picks[1].title
+                            }
+                        ]
+                    },
+                    {
+                        type: 'image',
+                        src: images.picks[1].url,
+                        alt: images.picks[1].title,
+                        caption: images.picks[1].originalUrl,
+                        href: images.picks[1].originalUrl
+                    },
+                    // Pick 3
+                    {
+                        type: 'heading',
+                        tag: 'h3',
+                        children: [
+                            {
+                                type: 'text',
+                                text: images.picks[2].title
+                            }
+                        ]
+                    },
+                    {
+                        type: 'image',
+                        src: images.picks[2].url,
+                        alt: images.picks[2].title,
+                        caption: images.picks[2].originalUrl,
+                        href: images.picks[2].originalUrl
+                    },
+                    // Closing paragraph
+                    {
+                        type: 'paragraph',
+                        children: [
+                            {
+                                type: 'text',
+                                text: 'Thank you for being part of our community. Have a great weekend!'
+                            }
+                        ]
+                    }
+                ],
+                direction: null,
+                format: '',
+                indent: 0,
+                type: 'root',
+                version: 1
+            }
+        };
         
-        const newsletterHtml = `
-            <figure>
-                <img src="${images.hero.url}" alt="Newsletter hero image">
-                <figcaption><a href="${images.hero.originalUrl}">${images.hero.originalUrl}</a></figcaption>
-            </figure>
-            
-            <p>Welcome to this week's newsletter!</p>
-            
-            <h2>Our Weekly Picks</h2>
-            
-            ${weeklyPicksHtml}
-            
-            <p>Thank you for being part of our community. Have a great weekend!</p>
-        `;
+        console.log('Lexical content created with', lexicalContent.root.children.length, 'cards');
         
-        // Create the draft post
+        // Create the draft post using lexical format
         const newPost = await api.posts.add({
             title: newsletterTitle,
-            html: newsletterHtml,
+            lexical: JSON.stringify(lexicalContent),
             status: 'draft',
             tags: ['newsletter'],
             feature_image: images.hero.url

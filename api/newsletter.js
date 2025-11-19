@@ -1,4 +1,3 @@
-
 const GhostAdminAPI = require('@tryghost/admin-api');
 
 // ⚠️ Get secrets from environment variables (safe and secure)
@@ -61,31 +60,6 @@ function formatDate(date) {
 async function createWeeklyNewsletter() {
     console.log('Starting createWeeklyNewsletter...');
     
-const isTest = req.query.test === 'true';
-const today = new Date().getDay();
-
-if (!isTest && today !== 5) {
-  return res.json({ success: true, message: "Not Friday" });
-}
-```
-
-**That's it!** You're only adding 1 line and modifying 1 line. You're **NOT removing any code**.
-
-### What changed:
-- **Line 1 (NEW):** `const isTest = req.query.test === 'true';` - checks for test parameter
-- **Line 3 (MODIFIED):** Changed `if (today !== 5)` to `if (!isTest && today !== 5)` - bypasses the Friday check when test=true
-
-## After deploying this change:
-
-**Normal URL** (only runs on Friday):
-```
-https://your-url.vercel.app/api/newsletter
-```
-
-**Test URL** (runs any day):
-```
-https://your-url.vercel.app/api/newsletter?test=true
-    
     try {
         // Get 3 random images from Ghost posts
         console.log('Fetching random images from Ghost...');
@@ -99,7 +73,7 @@ https://your-url.vercel.app/api/newsletter?test=true
         });
         
         // Build the newsletter content
-        const newsletterTitle = `Weekly Newsletter - ${formatDate(today)}`;
+        const newsletterTitle = `Weekly Newsletter - ${formatDate(new Date())}`;
         
         let postsHtml = '';
         if (recentPosts && recentPosts.length > 0) {
@@ -165,6 +139,17 @@ https://your-url.vercel.app/api/newsletter?test=true
 // Serverless function handler
 module.exports = async (req, res) => {
     try {
+        // Check if it's Friday (or test mode)
+        const isTest = req.query.test === 'true';
+        const today = new Date().getDay(); // 0 = Sunday, 5 = Friday
+        
+        if (!isTest && today !== 5) {
+            return res.status(200).json({
+                success: true,
+                message: "Not Friday"
+            });
+        }
+        
         const result = await createWeeklyNewsletter();
         
         if (result.skipped) {

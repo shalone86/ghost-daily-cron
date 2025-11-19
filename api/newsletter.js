@@ -131,14 +131,8 @@ async function createWeeklyNewsletter(isTest = false) {
                         tag: 'h3',
                         children: [
                             {
-                                type: 'link',
-                                url: images.picks[0].originalUrl,
-                                children: [
-                                    {
-                                        type: 'text',
-                                        text: images.picks[0].title
-                                    }
-                                ]
+                                type: 'text',
+                                text: images.picks[0].title
                             }
                         ]
                     },
@@ -155,14 +149,8 @@ async function createWeeklyNewsletter(isTest = false) {
                         tag: 'h3',
                         children: [
                             {
-                                type: 'link',
-                                url: images.picks[1].originalUrl,
-                                children: [
-                                    {
-                                        type: 'text',
-                                        text: images.picks[1].title
-                                    }
-                                ]
+                                type: 'text',
+                                text: images.picks[1].title
                             }
                         ]
                     },
@@ -179,14 +167,8 @@ async function createWeeklyNewsletter(isTest = false) {
                         tag: 'h3',
                         children: [
                             {
-                                type: 'link',
-                                url: images.picks[2].originalUrl,
-                                children: [
-                                    {
-                                        type: 'text',
-                                        text: images.picks[2].title
-                                    }
-                                ]
+                                type: 'text',
+                                text: images.picks[2].title
                             }
                         ]
                     },

@@ -25,9 +25,9 @@ async function getRandomImagesFromGhost() {
         
         console.log(`Found ${posts.length} posts with images`);
         
-        // Shuffle and pick 3 random posts (1 hero + 2 content images)
+        // Shuffle and pick 4 random posts (1 hero + 3 weekly picks)
         const shuffled = posts.sort(() => Math.random() - 0.5);
-        const selectedPosts = shuffled.slice(0, 3);
+        const selectedPosts = shuffled.slice(0, 4);
         
         return {
             hero: {
@@ -35,16 +35,23 @@ async function getRandomImagesFromGhost() {
                 originalUrl: selectedPosts[0].url,
                 title: selectedPosts[0].title
             },
-            image1: {
-                url: selectedPosts[1].feature_image,
-                originalUrl: selectedPosts[1].url,
-                title: selectedPosts[1].title
-            },
-            image2: {
-                url: selectedPosts[2].feature_image,
-                originalUrl: selectedPosts[2].url,
-                title: selectedPosts[2].title
-            }
+            picks: [
+                {
+                    url: selectedPosts[1].feature_image,
+                    originalUrl: selectedPosts[1].url,
+                    title: selectedPosts[1].title
+                },
+                {
+                    url: selectedPosts[2].feature_image,
+                    originalUrl: selectedPosts[2].url,
+                    title: selectedPosts[2].title
+                },
+                {
+                    url: selectedPosts[3].feature_image,
+                    originalUrl: selectedPosts[3].url,
+                    title: selectedPosts[3].title
+                }
+            ]
         };
     } catch (error) {
         console.error('Error fetching images from Ghost:', error);
@@ -61,52 +68,36 @@ async function createWeeklyNewsletter() {
     console.log('Starting createWeeklyNewsletter...');
     
     try {
-        // Get 3 random images from Ghost posts
+        // Get 4 random images from Ghost posts
         console.log('Fetching random images from Ghost...');
         const images = await getRandomImagesFromGhost();
-        
-        // Get some recent posts to feature in the newsletter
-        const recentPosts = await api.posts.browse({
-            filter: 'status:published',
-            limit: 5,
-            order: 'published_at DESC'
-        });
         
         // Build the newsletter content
         const newsletterTitle = `Weekly Newsletter - ${formatDate(new Date())}`;
         
-        let postsHtml = '';
-        if (recentPosts && recentPosts.length > 0) {
-            postsHtml = '<h2>Recent Highlights</h2><ul>';
-            recentPosts.forEach(post => {
-                postsHtml += `<li><a href="${ADMIN_API_URL}/content/${post.slug}/">${post.title}</a></li>`;
-            });
-            postsHtml += '</ul>';
-        }
+        // Build the "Our Weekly Picks" section with 3 images
+        let weeklyPicksHtml = '';
+        images.picks.forEach(pick => {
+            weeklyPicksHtml += `
+                <h3>${pick.title}</h3>
+                <figure>
+                    <img src="${pick.url}" alt="${pick.title}">
+                    <figcaption><a href="${pick.originalUrl}">${pick.originalUrl}</a></figcaption>
+                </figure>
+            `;
+        });
         
         const newsletterHtml = `
             <figure>
                 <img src="${images.hero.url}" alt="Newsletter hero image">
-                <figcaption>${images.hero.originalUrl}</figcaption>
+                <figcaption><a href="${images.hero.originalUrl}">${images.hero.originalUrl}</a></figcaption>
             </figure>
             
-            <p>Welcome to this week's newsletter! Here's what's been happening...</p>
+            <p>Welcome to this week's newsletter!</p>
             
-            ${postsHtml}
+            <h2>Our Weekly Picks</h2>
             
-            <h2>Featured Content</h2>
-            
-            <figure>
-                <img src="${images.image1.url}" alt="Featured image 1">
-                <figcaption>${images.image1.originalUrl}</figcaption>
-            </figure>
-            
-            <p>Check out our latest updates and stories from the community.</p>
-            
-            <figure>
-                <img src="${images.image2.url}" alt="Featured image 2">
-                <figcaption>${images.image2.originalUrl}</figcaption>
-            </figure>
+            ${weeklyPicksHtml}
             
             <p>Thank you for being part of our community. Have a great weekend!</p>
         `;

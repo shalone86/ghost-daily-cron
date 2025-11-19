@@ -131,8 +131,14 @@ async function createWeeklyNewsletter(isTest = false) {
                         tag: 'h3',
                         children: [
                             {
-                                type: 'text',
-                                text: images.picks[0].title
+                                type: 'link',
+                                url: images.picks[0].originalUrl,
+                                children: [
+                                    {
+                                        type: 'text',
+                                        text: images.picks[0].title
+                                    }
+                                ]
                             }
                         ]
                     },
@@ -140,6 +146,7 @@ async function createWeeklyNewsletter(isTest = false) {
                         type: 'image',
                         src: images.picks[0].url,
                         alt: images.picks[0].title,
+                        href: images.picks[0].originalUrl,
                         caption: `<a href="${images.picks[0].originalUrl}">read more</a>`
                     },
                     // Pick 2
@@ -148,8 +155,14 @@ async function createWeeklyNewsletter(isTest = false) {
                         tag: 'h3',
                         children: [
                             {
-                                type: 'text',
-                                text: images.picks[1].title
+                                type: 'link',
+                                url: images.picks[1].originalUrl,
+                                children: [
+                                    {
+                                        type: 'text',
+                                        text: images.picks[1].title
+                                    }
+                                ]
                             }
                         ]
                     },
@@ -157,6 +170,7 @@ async function createWeeklyNewsletter(isTest = false) {
                         type: 'image',
                         src: images.picks[1].url,
                         alt: images.picks[1].title,
+                        href: images.picks[1].originalUrl,
                         caption: `<a href="${images.picks[1].originalUrl}">read more</a>`
                     },
                     // Pick 3
@@ -165,8 +179,14 @@ async function createWeeklyNewsletter(isTest = false) {
                         tag: 'h3',
                         children: [
                             {
-                                type: 'text',
-                                text: images.picks[2].title
+                                type: 'link',
+                                url: images.picks[2].originalUrl,
+                                children: [
+                                    {
+                                        type: 'text',
+                                        text: images.picks[2].title
+                                    }
+                                ]
                             }
                         ]
                     },
@@ -174,6 +194,7 @@ async function createWeeklyNewsletter(isTest = false) {
                         type: 'image',
                         src: images.picks[2].url,
                         alt: images.picks[2].title,
+                        href: images.picks[2].originalUrl,
                         caption: `<a href="${images.picks[2].originalUrl}">read more</a>`
                     },
                     // Callout card with thank you message

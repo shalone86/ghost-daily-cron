@@ -83,14 +83,6 @@ async function createWeeklyNewsletter() {
         const lexicalContent = {
             root: {
                 children: [
-                    // Hero image
-                    {
-                        type: 'image',
-                        src: images.hero.url,
-                        alt: 'Newsletter hero image',
-                        caption: images.hero.originalUrl,
-                        href: images.hero.originalUrl
-                    },
                     // Welcome paragraph
                     {
                         type: 'paragraph',
@@ -127,8 +119,7 @@ async function createWeeklyNewsletter() {
                         type: 'image',
                         src: images.picks[0].url,
                         alt: images.picks[0].title,
-                        caption: images.picks[0].originalUrl,
-                        href: images.picks[0].originalUrl
+                        caption: `<a href="${images.picks[0].originalUrl}">${images.picks[0].originalUrl}</a>`
                     },
                     // Pick 2
                     {
@@ -145,8 +136,7 @@ async function createWeeklyNewsletter() {
                         type: 'image',
                         src: images.picks[1].url,
                         alt: images.picks[1].title,
-                        caption: images.picks[1].originalUrl,
-                        href: images.picks[1].originalUrl
+                        caption: `<a href="${images.picks[1].originalUrl}">${images.picks[1].originalUrl}</a>`
                     },
                     // Pick 3
                     {
@@ -163,8 +153,7 @@ async function createWeeklyNewsletter() {
                         type: 'image',
                         src: images.picks[2].url,
                         alt: images.picks[2].title,
-                        caption: images.picks[2].originalUrl,
-                        href: images.picks[2].originalUrl
+                        caption: `<a href="${images.picks[2].originalUrl}">${images.picks[2].originalUrl}</a>`
                     },
                     // Closing paragraph
                     {
@@ -193,7 +182,8 @@ async function createWeeklyNewsletter() {
             lexical: JSON.stringify(lexicalContent),
             status: 'draft',
             tags: ['newsletter'],
-            feature_image: images.hero.url
+            feature_image: images.hero.url,
+            feature_image_caption: `<a href="${images.hero.originalUrl}">${images.hero.originalUrl}</a>`
         });
         
         console.log(`Successfully created newsletter draft: ${newPost.title}`);

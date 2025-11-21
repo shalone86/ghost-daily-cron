@@ -59,34 +59,13 @@ async function getRandomImagesFromGhost() {
     }
 }
 
-async function getNewsletterByName(name) {
-    try {
-        const newsletters = await api.newsletters.browse();
-        const newsletter = newsletters.find(n => 
-            n.name.toLowerCase().includes(name.toLowerCase())
-        );
-        
-        if (!newsletter) {
-            console.log('Available newsletters:', newsletters.map(n => n.name).join(', '));
-            throw new Error(`Newsletter "${name}" not found`);
-        }
-        
-        console.log(`Found newsletter: ${newsletter.name} (ID: ${newsletter.id})`);
-        return newsletter;
-    } catch (error) {
-        console.error('Error fetching newsletter:', error);
-        throw error;
-    }
-}
-
 function formatDate(date) {
     const options = { year: 'numeric', month: 'long', day: 'numeric' };
     return date.toLocaleDateString('en-US', options);
 }
 
-async function createWeeklyNewsletter(isTest = false) {
+async function createWeeklyNewsletter() {
     console.log('Starting createWeeklyNewsletter...');
-    console.log('Test mode:', isTest);
     
     try {
         // Get 4 random images from Ghost posts
@@ -97,12 +76,6 @@ async function createWeeklyNewsletter(isTest = false) {
         console.log('Pick 1:', images.picks[0].title);
         console.log('Pick 2:', images.picks[1].title);
         console.log('Pick 3:', images.picks[2].title);
-        
-        // Get the newsletter if not in test mode
-        let newsletter = null;
-        if (!isTest) {
-            newsletter = await getNewsletterByName('Catholic Gallery Newsletter');
-        }
         
         // Build the newsletter content using Lexical format
         const newsletterTitle = `Weekly Newsletter - ${formatDate(new Date())}`;
@@ -196,29 +169,20 @@ async function createWeeklyNewsletter(isTest = false) {
         
         console.log('Lexical content created with', lexicalContent.root.children.length, 'cards');
         
-        // Prepare post data
+        // Prepare post data - ALWAYS create as draft
         const postData = {
             title: newsletterTitle,
             lexical: JSON.stringify(lexicalContent),
             tags: ['newsletter'],
             feature_image: images.hero.url,
-            feature_image_caption: `<a href="${images.hero.originalUrl}">read more</a>`
+            feature_image_caption: `<a href="${images.hero.originalUrl}">read more</a>`,
+            status: 'draft'  // Always create as draft
         };
-        
-        // If not in test mode, publish as email-only
-        if (!isTest && newsletter) {
-            postData.status = 'published';
-            postData.visibility = 'email';
-            postData.email_only = true;
-            postData.newsletters = [newsletter.id];
-        } else {
-            postData.status = 'draft';
-        }
         
         // Create the post
         const newPost = await api.posts.add(postData);
         
-        console.log(`Successfully created newsletter: ${newPost.title}`);
+        console.log(`Successfully created newsletter draft: ${newPost.title}`);
         console.log(`Post ID: ${newPost.id}`);
         console.log(`Status: ${newPost.status}`);
         
@@ -239,24 +203,11 @@ async function createWeeklyNewsletter(isTest = false) {
 // Serverless function handler
 module.exports = async (req, res) => {
     try {
-        // Check if it's Friday (or test mode)
-        const isTest = req.query.test === 'true';
-        const today = new Date().getDay(); // 0 = Sunday, 5 = Friday
-        
-        if (!isTest && today !== 5) {
-            return res.status(200).json({
-                success: true,
-                message: "Not Friday"
-            });
-        }
-        
-        const result = await createWeeklyNewsletter(isTest);
+        const result = await createWeeklyNewsletter();
         
         res.status(200).json({
             success: true,
-            message: isTest 
-                ? `Newsletter draft created: ${result.title}` 
-                : `Newsletter published and sent to Catholic Gallery Newsletter: ${result.title}`,
+            message: `Newsletter draft created: ${result.title}`,
             postId: result.postId,
             status: result.status,
             editUrl: result.url

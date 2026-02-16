@@ -169,15 +169,16 @@ async function createWeeklyNewsletter() {
         
         console.log('Lexical content created with', lexicalContent.root.children.length, 'cards');
         
-        // Prepare post data - ALWAYS create as draft
-        const postData = {
-            title: newsletterTitle,
-            lexical: JSON.stringify(lexicalContent),
-            tags: ['newsletter'],
-            feature_image: images.hero.url,
-            feature_image_caption: `<a href="${images.hero.originalUrl}">read more</a>`,
-            status: 'draft'  // Always create as draft
-        };
+       // Prepare post data - Set to published and target newsletter subscribers
+const postData = {
+    title: newsletterTitle,
+    lexical: JSON.stringify(lexicalContent),
+    tags: ['newsletter'],
+    feature_image: images.hero.url,
+    feature_image_caption: `<a href="${images.hero.originalUrl}">read more</a>`,
+    status: 'published', // Publish immediately
+    email_recipient_filter: 'all' // This triggers the email to all members
+};
         
         // Create the post
         const newPost = await api.posts.add(postData);
@@ -186,13 +187,12 @@ async function createWeeklyNewsletter() {
         console.log(`Post ID: ${newPost.id}`);
         console.log(`Status: ${newPost.status}`);
         
-        return {
-            success: true,
-            postId: newPost.id,
-            title: newPost.title,
-            status: newPost.status,
-            url: `${ADMIN_API_URL}/ghost/#/editor/post/${newPost.id}`
-        };
+        res.status(200).json({
+    success: true,
+    message: `Newsletter published and emailed: ${result.title}`,
+    postId: result.postId,
+    status: result.status
+});
         
     } catch (error) {
         console.error('Error creating newsletter:', error);

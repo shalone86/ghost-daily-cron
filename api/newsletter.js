@@ -78,7 +78,7 @@ async function createWeeklyNewsletter() {
         console.log('Pick 3:', images.picks[2].title);
         
         // Build the newsletter content using Lexical format
-        const newsletterTitle = `Weekly Newsletter - ${formatDate(new Date())}`;
+        const newsletterTitle = `Weekly Newsletter`;
         
         const lexicalContent = {
             root: {

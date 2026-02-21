@@ -176,7 +176,7 @@ const postData = {
     tags: ['newsletter'],
     feature_image: images.hero.url,
     feature_image_caption: `<a href="${images.hero.originalUrl}">read more</a>`,
-    status: 'published', // Publish immediately
+    status: 'draft', // Publish immediately
     email_recipient_filter: 'all' // This triggers the email to all members
 };
         

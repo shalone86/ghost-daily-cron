@@ -15,7 +15,7 @@ async function updateFeaturedPost() {
     console.log('Starting updateFeaturedPost...');
     
     // 1. Unfeature dynamic posts
-    const filterToUnfeature = `featured:true+tag:-${PERMANENT_FEATURE_TAG}+visibility:public`;
+    const filterToUnfeature = `featured:true+tag:-${PERMANENT_FEATURE_TAG}`;
     
     let postsToUnfeature = [];
     try {
@@ -63,7 +63,11 @@ async function updateFeaturedPost() {
     
     // 3. Select 3 random posts
     const numberOfPostsToFeature = Math.min(3, allPosts.length);
-    const shuffled = allPosts.sort(() => Math.random() - 0.5);
+    const shuffled = [...allPosts];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
     const selectedPosts = shuffled.slice(0, numberOfPostsToFeature);
     
     console.log(`Selected ${selectedPosts.length} random posts to feature`);

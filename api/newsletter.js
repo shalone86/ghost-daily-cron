@@ -10,57 +10,111 @@ const api = new GhostAdminAPI({
     version: 'v5.0'
 });
 
-async function getRandomImagesFromGhost() {
-    try {
-        // Fetch all published posts that have feature images
-        const posts = await api.posts.browse({
-            filter: 'status:published+feature_image:-null',
-            limit: 'all',
-            fields: 'feature_image,url,title'
-        });
-        
-        if (!posts || posts.length === 0) {
-            throw new Error('No posts with feature images found');
-        }
-        
-        console.log(`Found ${posts.length} posts with images`);
-        
-        // Shuffle and pick 4 random posts (1 hero + 3 weekly picks)
-        const shuffled = posts.sort(() => Math.random() - 0.5);
-        const selectedPosts = shuffled.slice(0, 4);
-        
-        return {
-            hero: {
-                url: selectedPosts[0].feature_image,
-                originalUrl: selectedPosts[0].url,
-                title: selectedPosts[0].title
-            },
-            picks: [
-                {
-                    url: selectedPosts[1].feature_image,
-                    originalUrl: selectedPosts[1].url,
-                    title: selectedPosts[1].title
-                },
-                {
-                    url: selectedPosts[2].feature_image,
-                    originalUrl: selectedPosts[2].url,
-                    title: selectedPosts[2].title
-                },
-                {
-                    url: selectedPosts[3].feature_image,
-                    originalUrl: selectedPosts[3].url,
-                    title: selectedPosts[3].title
-                }
-            ]
-        };
-    } catch (error) {
-        console.error('Error fetching images from Ghost:', error);
-        throw error;
+// Fisher-Yates shuffle (sort with Math.random() is biased)
+function shuffle(items) {
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
     }
+    return copy;
 }
 
-async function createWeeklyNewsletter() {
+// Skip sending if a newsletter already went out recently, so a cron retry
+// after a timeout doesn't email everyone twice
+const MIN_DAYS_BETWEEN_SENDS = 3;
+
+async function findRecentNewsletter() {
+    const since = new Date(Date.now() - MIN_DAYS_BETWEEN_SENDS * 24 * 60 * 60 * 1000).toISOString();
+    const recent = await api.posts.browse({
+        filter: `tag:newsletter+status:[published,sent]+created_at:>'${since}'`,
+        limit: 1,
+        fields: 'id,title,created_at'
+    });
+    return recent && recent.length > 0 ? recent[0] : null;
+}
+
+const GRID_SIZE = 6;
+
+// URLs of posts featured in earlier newsletters, so we can show readers
+// images they haven't been sent yet
+async function getPreviouslyFeaturedText() {
+    const pastNewsletters = await api.posts.browse({
+        filter: 'tag:newsletter+status:[published,sent]',
+        limit: 'all',
+        fields: 'lexical,feature_image_caption'
+    });
+    return (pastNewsletters || [])
+        .map(post => `${post.lexical || ''} ${post.feature_image_caption || ''}`)
+        .join(' ');
+}
+
+// Picks 1 hero + up to 6 grid images, preferring posts never featured before.
+// Once everything has been featured, the rest are filled from older picks.
+async function pickPosts() {
+    const posts = await api.posts.browse({
+        filter: 'status:published+feature_image:-null',
+        limit: 'all',
+        fields: 'feature_image,url,title'
+    });
+    
+    if (!posts || posts.length === 0) {
+        throw new Error('No posts with feature images found');
+    }
+    console.log(`Found ${posts.length} posts with images`);
+    
+    const featuredText = await getPreviouslyFeaturedText();
+    const unseen = posts.filter(post => !featuredText.includes(post.url));
+    const seen = posts.filter(post => featuredText.includes(post.url));
+    console.log(`${unseen.length} posts not featured in a newsletter yet`);
+    
+    const selected = [...shuffle(unseen), ...shuffle(seen)].slice(0, GRID_SIZE + 1);
+    return { hero: selected[0], grid: selected.slice(1) };
+}
+
+function escapeHtml(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// Ask Ghost for a smaller copy of its own images so the email stays light
+function thumbnailUrl(url) {
+    if (url.includes('/content/images/') && !url.includes('/content/images/size/')) {
+        return url.replace('/content/images/', '/content/images/size/w600/');
+    }
+    return url;
+}
+
+// Email-safe 3-column grid (tables render in Gmail and Outlook)
+function buildGridHtml(posts) {
+    const cells = posts.map(post => `
+        <td width="33%" valign="top" style="padding:4px;vertical-align:top;">
+            <a href="${escapeHtml(post.url)}" style="text-decoration:none;color:inherit;">
+                <img src="${escapeHtml(thumbnailUrl(post.feature_image))}" alt="${escapeHtml(post.title)}" width="180" style="display:block;width:100%;height:auto;border:0;">
+                <span style="display:block;margin-top:6px;font-size:13px;line-height:1.3;">${escapeHtml(post.title)}</span>
+            </a>
+        </td>`);
+    
+    const rows = [];
+    for (let i = 0; i < cells.length; i += 3) {
+        const row = cells.slice(i, i + 3);
+        while (row.length < 3) row.push('<td width="33%" style="padding:4px;"></td>');
+        rows.push(`<tr>${row.join('')}</tr>`);
+    }
+    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">${rows.join('')}</table>`;
+}
+
+async function createWeeklyNewsletter({ draftOnly = false } = {}) {
     console.log('Starting createWeeklyNewsletter...');
+    
+    const recent = draftOnly ? null : await findRecentNewsletter();
+    if (recent) {
+        console.log(`Newsletter already sent at ${recent.created_at} (ID: ${recent.id}). Skipping.`);
+        return { skipped: true, id: recent.id };
+    }
     
     // 1. Automatically fetch your active newsletter slug
     console.log('Fetching active newsletter configuration...');
@@ -70,72 +124,72 @@ async function createWeeklyNewsletter() {
     }
     const newsletterSlug = newsletters[0].slug;
     console.log(`Targeting newsletter: ${newsletterSlug}`);
-
-    // 2. Fetch random images from Ghost posts
-    console.log('Fetching random images from Ghost...');
-    const images = await getRandomImagesFromGhost();
     
-    console.log('Hero image:', images.hero.title);
-    console.log('Pick 1:', images.picks[0].title);
-    console.log('Pick 2:', images.picks[1].title);
-    console.log('Pick 3:', images.picks[2].title);
+    const site = await api.site.read();
+    const siteUrl = site.url.replace(/\/$/, '');
     
-    // 3. Build the newsletter content using Lexical format
-    const newsletterTitle = `Weekly Newsletter`;
+    // 2. Pick this week's images
+    const { hero, grid } = await pickPosts();
+    console.log('Hero:', hero.title);
+    grid.forEach(post => console.log('Grid:', post.title));
+    
+    // 3. Build the newsletter content using Lexical format.
+    // Almost silent: the images do the talking.
+    const children = [
+        {
+            type: 'button',
+            version: 1,
+            buttonText: 'View',
+            alignment: 'center',
+            buttonUrl: hero.url
+        }
+    ];
+    
+    if (grid.length > 0) {
+        children.push(
+            { type: 'horizontalrule' },
+            {
+                type: 'heading',
+                tag: 'h3',
+                children: [{ type: 'text', text: grid.length === 1 ? 'One more' : `${['Two', 'Three', 'Four', 'Five', 'Six'][grid.length - 2]} more` }]
+            },
+            { type: 'html', version: 1, html: buildGridHtml(grid) }
+        );
+    }
+    
+    children.push(
+        // Shown only to free members
+        {
+            type: 'email-cta',
+            version: 1,
+            segment: 'status:free',
+            alignment: 'left',
+            showDividers: true,
+            showButton: true,
+            buttonText: 'Give a gift',
+            buttonUrl: `${siteUrl}/#/portal/support`,
+            html: '<p><strong>All our images are free to download</strong></p>' +
+                "<p>We gather sacred art from museums around the world, make sure it's in the public domain, and sort it for Catholics so you don't have to search. If it has helped your prayer, your home or your parish, would you help keep it free?</p>" +
+                `<p>Or <a href="${siteUrl}/#/portal/account/plans">become a supporter</a>.</p>`
+        },
+        // Shown only to paid members
+        {
+            type: 'email-cta',
+            version: 1,
+            segment: 'status:-free',
+            alignment: 'left',
+            showDividers: true,
+            showButton: false,
+            buttonText: '',
+            buttonUrl: '',
+            html: '<p><strong>Thank you, and God bless you</strong></p>' +
+                '<p>Your generosity keeps this beauty free for everyone who comes looking. You are remembered in our prayers.</p>'
+        }
+    );
+    
     const lexicalContent = {
         root: {
-            children: [
-                {
-                    type: 'heading',
-                    tag: 'h1',
-                    children: [{ type: 'text', text: "Welcome to this week's newsletter! Enjoy our Weekly Picks:" }]
-                },
-                { type: 'horizontalrule' },
-                // Pick 1
-                {
-                    type: 'heading',
-                    tag: 'h3',
-                    children: [{ type: 'text', text: images.picks[0].title }]
-                },
-                {
-                    type: 'image',
-                    src: images.picks[0].url,
-                    alt: images.picks[0].title,
-                    href: images.picks[0].originalUrl,
-                    caption: `<a href="${images.picks[0].originalUrl}">read more</a>`
-                },
-                // Pick 2
-                {
-                    type: 'heading',
-                    tag: 'h3',
-                    children: [{ type: 'text', text: images.picks[1].title }]
-                },
-                {
-                    type: 'image',
-                    src: images.picks[1].url,
-                    alt: images.picks[1].title,
-                    href: images.picks[1].originalUrl,
-                    caption: `<a href="${images.picks[1].originalUrl}">read more</a>`
-                },
-                // Pick 3
-                {
-                    type: 'heading',
-                    tag: 'h3',
-                    children: [{ type: 'text', text: images.picks[2].title }]
-                },
-                {
-                    type: 'image',
-                    src: images.picks[2].url,
-                    alt: images.picks[2].title,
-                    href: images.picks[2].originalUrl,
-                    caption: `<a href="${images.picks[2].originalUrl}">read more</a>`
-                },
-                {
-                    type: 'callout',
-                    calloutEmoji: '💌',
-                    calloutText: 'Thank you for being part of our community. Have a great weekend!'
-                }
-            ],
+            children,
             direction: null,
             format: '',
             indent: 0,
@@ -144,19 +198,29 @@ async function createWeeklyNewsletter() {
         }
     };
     
+    // The title is the subject line: name the hero image so the inbox preview changes each week
+    const newsletterTitle = grid.length > 0 ? `${hero.title} + ${grid.length} more` : hero.title;
+    
     // 4. STEP 1: Create the post as a DRAFT marked as email_only
     const draftData = {
         title: newsletterTitle,
         lexical: JSON.stringify(lexicalContent),
         tags: ['newsletter'],
-        feature_image: images.hero.url,
-        feature_image_caption: `<a href="${images.hero.originalUrl}">read more</a>`,
+        feature_image: hero.feature_image,
+        feature_image_alt: hero.title,
+        feature_image_caption: `<a href="${escapeHtml(hero.url)}">${escapeHtml(hero.title)}</a>`,
         status: 'draft',
         email_only: true // Keeps it off the website feed
     };
     
     console.log('Creating newsletter draft...');
     const draftPost = await api.posts.add(draftData);
+    
+    // Preview mode: leave the draft in Ghost so you can check it and send yourself a test email
+    if (draftOnly) {
+        console.log(`Draft only (ID: ${draftPost.id}). Not sending.`);
+        return { draftOnly: true, id: draftPost.id, title: draftPost.title };
+    }
     
     // 5. STEP 2: Publish the draft with newsletter tracking parameters to broadcast it
     console.log(`Draft created (ID: ${draftPost.id}). Triggering email-only broadcast...`);
@@ -179,7 +243,25 @@ async function createWeeklyNewsletter() {
 // Serverless function handler
 module.exports = async (req, res) => {
     try {
-        const result = await createWeeklyNewsletter();
+        // Add ?draft=1 to the URL to create a draft without emailing anyone
+        const draftOnly = Boolean(req.query && req.query.draft);
+        const result = await createWeeklyNewsletter({ draftOnly });
+        
+        if (result.draftOnly) {
+            return res.status(200).json({
+                success: true,
+                message: `Draft created, not sent: ${result.title}`,
+                postId: result.id
+            });
+        }
+        
+        if (result.skipped) {
+            return res.status(200).json({
+                success: true,
+                message: `Skipped: a newsletter was already sent in the last ${MIN_DAYS_BETWEEN_SENDS} days`,
+                postId: result.id
+            });
+        }
         
         res.status(200).json({
             success: true,
@@ -194,10 +276,4 @@ module.exports = async (req, res) => {
             message: `Newsletter creation failed: ${error.message}`
         });
     }
-};
-
-// ⚙️ Vercel Runtime Configuration Block
-// This tells Vercel to allow this specific function up to 60 seconds to process
-export const config = {
-    maxDuration: 60
 };

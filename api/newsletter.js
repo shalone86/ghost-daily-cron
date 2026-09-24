@@ -10,6 +10,30 @@ const api = new GhostAdminAPI({
     version: 'v5.0'
 });
 
+// Fisher-Yates shuffle (sort with Math.random() is biased)
+function shuffle(items) {
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+}
+
+// Skip sending if a newsletter already went out recently, so a cron retry
+// after a timeout doesn't email everyone twice
+const MIN_DAYS_BETWEEN_SENDS = 3;
+
+async function findRecentNewsletter() {
+    const since = new Date(Date.now() - MIN_DAYS_BETWEEN_SENDS * 24 * 60 * 60 * 1000).toISOString();
+    const recent = await api.posts.browse({
+        filter: `tag:newsletter+status:[published,sent]+created_at:>'${since}'`,
+        limit: 1,
+        fields: 'id,title,created_at'
+    });
+    return recent && recent.length > 0 ? recent[0] : null;
+}
+
 async function getRandomImagesFromGhost() {
     try {
         // Fetch all published posts that have feature images
@@ -25,9 +49,12 @@ async function getRandomImagesFromGhost() {
         
         console.log(`Found ${posts.length} posts with images`);
         
+        if (posts.length < 4) {
+            throw new Error(`Need at least 4 posts with feature images, found ${posts.length}`);
+        }
+        
         // Shuffle and pick 4 random posts (1 hero + 3 weekly picks)
-        const shuffled = posts.sort(() => Math.random() - 0.5);
-        const selectedPosts = shuffled.slice(0, 4);
+        const selectedPosts = shuffle(posts).slice(0, 4);
         
         return {
             hero: {
@@ -61,6 +88,12 @@ async function getRandomImagesFromGhost() {
 
 async function createWeeklyNewsletter() {
     console.log('Starting createWeeklyNewsletter...');
+    
+    const recent = await findRecentNewsletter();
+    if (recent) {
+        console.log(`Newsletter already sent at ${recent.created_at} (ID: ${recent.id}). Skipping.`);
+        return { skipped: true, id: recent.id };
+    }
     
     // 1. Automatically fetch your active newsletter slug
     console.log('Fetching active newsletter configuration...');
@@ -181,6 +214,14 @@ module.exports = async (req, res) => {
     try {
         const result = await createWeeklyNewsletter();
         
+        if (result.skipped) {
+            return res.status(200).json({
+                success: true,
+                message: `Skipped: a newsletter was already sent in the last ${MIN_DAYS_BETWEEN_SENDS} days`,
+                postId: result.id
+            });
+        }
+        
         res.status(200).json({
             success: true,
             message: `Newsletter emailed to subscribers!`,
@@ -194,10 +235,4 @@ module.exports = async (req, res) => {
             message: `Newsletter creation failed: ${error.message}`
         });
     }
-};
-
-// ⚙️ Vercel Runtime Configuration Block
-// This tells Vercel to allow this specific function up to 60 seconds to process
-export const config = {
-    maxDuration: 60
 };

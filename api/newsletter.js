@@ -34,7 +34,9 @@ async function findRecentNewsletter() {
     return recent && recent.length > 0 ? recent[0] : null;
 }
 
-const GRID_SIZE = 6;
+const GRID_SIZE = 4;
+const HERO_TITLE_LENGTH = 60;
+const GRID_TITLE_LENGTH = 40;
 
 // URLs of posts featured in earlier newsletters, so we can show readers
 // images they haven't been sent yet
@@ -80,6 +82,37 @@ function escapeHtml(text) {
         .replace(/"/g, '&quot;');
 }
 
+// Shorten long titles at a word boundary
+function truncate(text, maxLength) {
+    const clean = String(text).trim();
+    if (clean.length <= maxLength) return clean;
+    const cut = clean.slice(0, maxLength - 1);
+    const lastSpace = cut.lastIndexOf(' ');
+    return `${(lastSpace > maxLength / 2 ? cut.slice(0, lastSpace) : cut).replace(/[\s,;:.\-–—]+$/, '')}…`;
+}
+
+// Email-safe button with inline styles, so it looks like a button in every inbox
+function emailButton(text, url, color, outline = false) {
+    const cellStyle = outline
+        ? `border:2px solid ${color};border-radius:5px;`
+        : `background:${color};border:2px solid ${color};border-radius:5px;`;
+    const linkStyle = `display:inline-block;padding:10px 18px;font-size:15px;font-weight:600;text-decoration:none;color:${outline ? color : '#ffffff'};`;
+    return `<td style="${cellStyle}"><a href="${escapeHtml(url)}" style="${linkStyle}">${escapeHtml(text)}</a></td>`;
+}
+
+// Cards shown only to one group of members in the email, never on the web
+function segmentHtmlCard(html, memberSegment) {
+    return {
+        type: 'html',
+        version: 1,
+        html,
+        visibility: {
+            web: { nonMember: false, memberSegment: '' },
+            email: { memberSegment }
+        }
+    };
+}
+
 // Ask Ghost for a smaller copy of its own images so the email stays light
 function thumbnailUrl(url) {
     if (url.includes('/content/images/') && !url.includes('/content/images/size/')) {
@@ -88,20 +121,20 @@ function thumbnailUrl(url) {
     return url;
 }
 
-// Email-safe 3-column grid (tables render in Gmail and Outlook)
+// Email-safe 2-column grid (tables render in Gmail and Outlook)
 function buildGridHtml(posts) {
     const cells = posts.map(post => `
-        <td width="33%" valign="top" style="padding:4px;vertical-align:top;">
+        <td width="50%" valign="top" style="padding:6px;vertical-align:top;">
             <a href="${escapeHtml(post.url)}" style="text-decoration:none;color:inherit;">
-                <img src="${escapeHtml(thumbnailUrl(post.feature_image))}" alt="${escapeHtml(post.title)}" width="180" style="display:block;width:100%;height:auto;border:0;">
-                <span style="display:block;margin-top:6px;font-size:13px;line-height:1.3;">${escapeHtml(post.title)}</span>
+                <img src="${escapeHtml(thumbnailUrl(post.feature_image))}" alt="${escapeHtml(post.title)}" width="270" style="display:block;width:100%;height:auto;border:0;">
+                <span style="display:block;margin-top:6px;font-size:14px;line-height:1.3;">${escapeHtml(truncate(post.title, GRID_TITLE_LENGTH))}</span>
             </a>
         </td>`);
     
     const rows = [];
-    for (let i = 0; i < cells.length; i += 3) {
-        const row = cells.slice(i, i + 3);
-        while (row.length < 3) row.push('<td width="33%" style="padding:4px;"></td>');
+    for (let i = 0; i < cells.length; i += 2) {
+        const row = cells.slice(i, i + 2);
+        if (row.length < 2) row.push('<td width="50%" style="padding:6px;"></td>');
         rows.push(`<tr>${row.join('')}</tr>`);
     }
     return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">${rows.join('')}</table>`;
@@ -127,11 +160,14 @@ async function createWeeklyNewsletter({ draftOnly = false } = {}) {
     
     const site = await api.site.read();
     const siteUrl = site.url.replace(/\/$/, '');
+    const accentColor = /^#[0-9a-fA-F]{3,6}$/.test(site.accent_color || '') ? site.accent_color : '#15212A';
+
     
     // 2. Pick this week's images
     const { hero, grid } = await pickPosts();
     console.log('Hero:', hero.title);
     grid.forEach(post => console.log('Grid:', post.title));
+    const heroTitle = truncate(hero.title, HERO_TITLE_LENGTH);
     
     // 3. Build the newsletter content using Lexical format.
     // Almost silent: the images do the talking.
@@ -151,40 +187,33 @@ async function createWeeklyNewsletter({ draftOnly = false } = {}) {
             {
                 type: 'heading',
                 tag: 'h3',
-                children: [{ type: 'text', text: grid.length === 1 ? 'One more' : `${['Two', 'Three', 'Four', 'Five', 'Six'][grid.length - 2]} more` }]
+                children: [{ type: 'text', text: 'More from our gallery' }]
             },
             { type: 'html', version: 1, html: buildGridHtml(grid) }
         );
     }
     
+    const divider = '<hr style="border:0;border-top:1px solid #e5e5e5;margin:28px 0;">';
     children.push(
         // Shown only to free members
-        {
-            type: 'email-cta',
-            version: 1,
-            segment: 'status:free',
-            alignment: 'left',
-            showDividers: true,
-            showButton: true,
-            buttonText: 'Give a gift',
-            buttonUrl: `${siteUrl}/#/portal/support`,
-            html: '<p><strong>All our images are free to download</strong></p>' +
-                "<p>We gather sacred art from museums around the world, make sure it's in the public domain, and sort it for Catholics so you don't have to search. If it has helped your prayer, your home or your parish, would you help keep it free?</p>" +
-                `<p>Or <a href="${siteUrl}/#/portal/account/plans">become a supporter</a>.</p>`
-        },
+        segmentHtmlCard(
+            divider +
+            '<p><strong>All our images are free to download</strong></p>' +
+            "<p>We gather sacred art from museums around the world, make sure it's in the public domain, and sort it for Catholics so you don't have to search. If it has helped your prayer, your home or your parish, would you help keep it free?</p>" +
+            '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>' +
+            emailButton('Give a gift', `${siteUrl}/#/portal/support`, accentColor) +
+            '<td width="10"></td>' +
+            emailButton('Become a supporter', `${siteUrl}/#/portal/account/plans`, accentColor, true) +
+            '</tr></table>',
+            'status:free'
+        ),
         // Shown only to paid members
-        {
-            type: 'email-cta',
-            version: 1,
-            segment: 'status:-free',
-            alignment: 'left',
-            showDividers: true,
-            showButton: false,
-            buttonText: '',
-            buttonUrl: '',
-            html: '<p><strong>Thank you, and God bless you</strong></p>' +
-                '<p>Your generosity keeps this beauty free for everyone who comes looking. You are remembered in our prayers.</p>'
-        }
+        segmentHtmlCard(
+            divider +
+            '<p><strong>Thank you, and God bless you</strong></p>' +
+            '<p>Your generosity keeps this beauty free for everyone who comes looking. You are remembered in our prayers.</p>',
+            'status:-free'
+        )
     );
     
     const lexicalContent = {
@@ -199,7 +228,7 @@ async function createWeeklyNewsletter({ draftOnly = false } = {}) {
     };
     
     // The title is the subject line: name the hero image so the inbox preview changes each week
-    const newsletterTitle = grid.length > 0 ? `${hero.title} + ${grid.length} more` : hero.title;
+    const newsletterTitle = grid.length > 0 ? `${heroTitle} + ${grid.length} more` : heroTitle;
     
     // 4. STEP 1: Create the post as a DRAFT marked as email_only
     const draftData = {
@@ -208,9 +237,9 @@ async function createWeeklyNewsletter({ draftOnly = false } = {}) {
         tags: ['newsletter'],
         feature_image: hero.feature_image,
         feature_image_alt: hero.title,
-        feature_image_caption: `<a href="${escapeHtml(hero.url)}">${escapeHtml(hero.title)}</a>`,
+        feature_image_caption: `<a href="${escapeHtml(hero.url)}">${escapeHtml(heroTitle)}</a>`,
         status: 'draft',
-        email_only: true // Keeps it off the website feed
+        email_only: true // Email only: never published on the website
     };
     
     console.log('Creating newsletter draft...');
